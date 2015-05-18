@@ -125,7 +125,7 @@ Added support for MaxMind GeoIP2 Precision Service and fixed bug with measuremen
 = Why do I see only question marks instead of my location? =
 Your IP was not found in the database. The most usual cause if that your browser and server are behind a NAT and you are 
 getting a private IP not a public one. For debugging purposes you can set the IP used by plug-in in the settings page. 
-= My location is wrong/partial. How comes? =
+= My location is wrong/partial. How come? =
 Geolocation using IP addresses is not entirely accurate. The geolocation relies on a static database of addresses and 
 their approximate location, not exact location like mobile GPS. 
 To ensure maximum accuracy make sure you have the latest database. Purchasing the non-lite version of the database from MaxMind 
