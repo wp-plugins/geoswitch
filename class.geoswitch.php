@@ -12,6 +12,7 @@ class GeoSwitch {
     private static $record = null;
     private static $data_source = null;
     private static $useKm = true;
+	private static $found = '';
 
 	public static function init() {
         if (self::$initialized) {
@@ -19,21 +20,22 @@ class GeoSwitch {
         }
         self::$initialized = true;
 
-        self::$user_ip = self::get_user_ip();
-
+		$opt = self::get_options();
+		
+        self::$user_ip = empty($opt['debug_ip']) ? self::get_user_ip() : $opt['debug_ip'];
+		
         try {
-            $opt = self::get_options();
-
             self::$useKm = ($opt['units'] == 'km');
             self::$data_source = self::request_record($opt);
-            self::$record = self::$data_source->city(self::$user_ip);
         } catch (Exception $e) {
-            self::$record = null;
+			self::$data_source = null;
         }
+		
+		self::$record = self::get_record();
 
         add_shortcode('geoswitch', array( 'GeoSwitch', 'switch_block' ));
         add_shortcode('geoswitch_case', array( 'GeoSwitch', 'switch_case' ));
-
+		
         add_shortcode('geoswitch_ip', array( 'GeoSwitch', 'get_ip' ));
         add_shortcode('geoswitch_city', array( 'GeoSwitch', 'get_city' ));
         add_shortcode('geoswitch_state', array( 'GeoSwitch', 'get_state' ));
@@ -58,17 +60,20 @@ class GeoSwitch {
     }
 
 	public static function switch_block($atts, $content) {
-		$str = do_shortcode($content);
-        $arr = explode('#', $str, 3);
+		self::$found = null;
+		do_shortcode($content);
 
-        return count($arr) == 3
-            ? substr($arr[2], 0, intval($arr[1]))
-            : '';
+        return is_null(self::$found)
+            ? ''
+            : self::$found;
     }
 
 	public static function switch_case($atts, $content) {
-        $expandedContent = do_shortcode($content);
-
+		if (!is_null(self::$found))
+			return;
+		
+		$expandedContent = do_shortcode($content);
+		
         if (is_null(self::$record)) {
             if (!empty($atts['city']) ||
                 !empty($atts['state']) ||
@@ -77,11 +82,12 @@ class GeoSwitch {
                 !empty($atts['country_code']) ||
                 !empty($atts['within']) ||
                 !empty($atts['from'])) {
-                    return '';
+                    self::$found = '';
+            } else {
+				self::$found = $expandedContent;
             }
-            return '#'.strlen($expandedContent).'#'.$expandedContent;
+			return '';
         }
-
 
         if ((empty($atts['city']) || strcasecmp($atts['city'], self::$record->city->name) == 0)
             &&
@@ -94,7 +100,7 @@ class GeoSwitch {
             (empty($atts['country_code']) || strcasecmp($atts['country_code'], self::$record->country->isoCode) == 0)
             &&
             (empty($atts['within']) || self::within($atts['within'], $atts['from']))) {
-            return '#'.strlen($expandedContent).'#'.$expandedContent;
+			self::$found = $expandedContent;
         }
         return '';
     }
@@ -152,14 +158,14 @@ class GeoSwitch {
         return self::$record->location->longitude;
     }
 
-
     public static function activation() {
         $default_options=array(
             'database_name'=>'GeoLite2-City.mmdb',
-            'units'=>'km',
             'data_source'=>'localdb',
             'service_user_name'=>'',
-            'service_license_key'=>''
+            'service_license_key'=>'',
+            'units'=>'km',
+			'debug_ip'=>'',
          );
         add_option('geoswitch_options',$default_options);
     }
@@ -173,14 +179,17 @@ class GeoSwitch {
         $opt = get_option('geoswitch_options');
         if (!array_key_exists('database_name', $opt))
             $opt['database_name']='GeoLite2-City.mmdb';
-        if (!array_key_exists('units', $opt))
-            $opt['units']='km';
         if (!array_key_exists('data_source', $opt))
             $opt['data_source']='localdb';
         if (!array_key_exists('service_user_name', $opt))
             $opt['service_user_name']='';
         if (!array_key_exists('service_license_key', $opt))
             $opt['service_license_key']='';
+        if (!array_key_exists('units', $opt))
+            $opt['units']='km';
+        if (!array_key_exists('debug_ip', $opt))
+            $opt['debug_ip']='';
+
         return $opt;
     }
 
@@ -204,6 +213,18 @@ class GeoSwitch {
         return self::$useKm ? ($km <= $within) : (($km * 0.621371192) <= $within);
     }
 
+	private static function get_record() {
+		if (is_null(self::$data_source))
+			return null;
+		
+		try {
+			return self::$data_source->city(self::$user_ip);
+		} catch  (Exception $e) {
+			error_log($e);
+			return null;
+		}
+	}
+	
     private static function get_user_ip() {
         if ( ! empty( $_SERVER['HTTP_CLIENT_IP'] ) ) {
             //check ip from share internet
